@@ -1,0 +1,3 @@
+rootProject.name = 'SpringBoot_4_Docker'
+
+include 'order-service'
