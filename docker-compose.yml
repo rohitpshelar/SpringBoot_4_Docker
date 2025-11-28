@@ -1,0 +1,128 @@
+# ============================================================
+# 🧠 docker-compose.yml — Kafka + Schema Registry + Microservices
+# ============================================================
+# This file orchestrates the full event-driven system:
+#   - Apache Kafka broker (core message hub)
+#   - Schema Registry (Avro schema storage/validation)
+#   - Kafka UI (for easy topic visualization)
+#   - Three Spring Boot microservices:
+#       • order-service → produces "order.v1" events
+#       • payment-service → consumes orders & produces "payment.v1"
+#       • notification-service → consumes payment results
+#
+# Think of this as the “movie set” where every actor (container)
+# plays a role in the Kafka story.
+# ============================================================
+
+services:
+
+  # ------------------------------------------------------------
+  # 🧩 KAFKA BROKER — The central messaging hub
+  # ------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.9.1            # ✅ Uses the official Apache Kafka 3.9.1 image
+    container_name: kafka                # Container name visible in Docker dashboard
+
+    environment:
+      # 🧱 Kafka in KRaft mode (no Zookeeper needed)
+      KAFKA_PROCESS_ROLES: "broker,controller"              # Kafka 3.x combines both roles
+      KAFKA_NODE_ID: "1"                                   # Unique node ID in cluster
+
+      # 🧭 KRaft quorum setup (1-node cluster)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"       # Controller at kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"        # Internal listener for controllers
+
+      # 🗣️ Define listeners (network interfaces)
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092" # How other containers reach Kafka
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"        # Default internal communication channel
+
+      # 🧰 Config conveniences
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"              # Automatically create topics when used
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"          # Single-node = no replication
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"                # Where Kafka stores its logs/messages
+
+    ports:
+      - "9092:9092"                                       # Expose Kafka broker to host
+
+    # 🧪 Health check ensures Kafka is ready before dependents start
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+    volumes:
+      - kafka_data:/var/lib/kafka/data                     # Persistent storage for Kafka logs
+
+  # ------------------------------------------------------------
+  # 🧬 SCHEMA REGISTRY — Validates Avro schemas
+  # ------------------------------------------------------------
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.0            # Confluent’s schema registry
+    container_name: schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy                          # Waits for Kafka readiness
+
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081        # API for clients (Avro serializer)
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+
+    ports:
+      - "8081:8081"                                         # Host access to schema registry
+
+  # ------------------------------------------------------------
+  # 🪄 INIT-TOPICS — Bootstrap Kafka topics automatically
+  # ------------------------------------------------------------
+  init-topics:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+      --create --if-not-exists --topic order.v1 --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+      --create --if-not-exists --topic payment.v1 --partitions 3 --replication-factor 1 &&
+      echo '✅ Topics order.v1 and payment.v1 ready!'"
+    restart: "no"                                           # Runs once then exits successfully
+
+  # ------------------------------------------------------------
+  # 🖥️ KAFKA UI — Browser-based dashboard for Kafka
+  # ------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest                    # Lightweight open-source Kafka UI
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local                         # Cluster name shown in UI
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092        # Kafka broker connection
+      - KAFKA_CLUSTERS_0_SCHEMAREGISTRY=http://schema-registry:8081  # Schema registry integration
+    ports:
+      - "8080:8080"                                         # Accessible at http://localhost:8080
+
+
+  # ------------------------------------------------------------
+  # 🧾 ORDER SERVICE — Produces OrderCreated events
+  # ------------------------------------------------------------
+  order-service:
+    build:
+      context: ./order-service                              # Builds from subfolder
+      dockerfile: Dockerfile
+#    depends_on:
+#      init-topics:
+#        condition: service_completed_successfully            # Starts after topics exist
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker                        # Uses docker profile
+    ports:
+      - "8082:8082"                                          # REST API for placing orders
+
+
+volumes:
+  kafka_data:

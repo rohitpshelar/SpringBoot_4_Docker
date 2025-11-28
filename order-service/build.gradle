@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.0'
 	id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.github.davidmc24.gradle.plugin.avro' version '1.9.1'
 }
 
 group = 'com.rt'
@@ -16,17 +17,53 @@ java {
 
 repositories {
 	mavenCentral()
+    maven {
+        url 'https://packages.confluent.io/maven/'
+    }
 }
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
+    implementation 'io.confluent:kafka-avro-serializer:8.1.0'
+    implementation 'org.apache.avro:avro:1.12.1'
 	implementation 'org.springframework.boot:spring-boot-starter-kafka'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+avro {
+    // Makes Avro generate Strings as java.lang.String,
+    // not Utf8 objects — easier for coding.
+    stringType = 'String'
+
+    // Output directory for generated .java files
+    outputCharacterEncoding = 'UTF-8'
+}
+
+// Source Sets Configuration
+sourceSets {
+    main {
+        java {
+            srcDirs = [
+                    'src/main/java',
+                    'build/generated-main-avro-java'
+            ]
+        }
+    }
+}
+
+springBoot {
+    // Defines which class has the main() entry point
+    mainClass = 'com.rt.order.OrderServiceApplication'
+}
+
+// Task to ensure Avro generation happens before compilation
+tasks.named('compileJava') {
+    dependsOn tasks.named('generateAvroJava')
 }
 
 tasks.named('test') {

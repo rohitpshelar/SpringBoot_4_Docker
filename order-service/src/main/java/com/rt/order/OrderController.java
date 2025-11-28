@@ -3,11 +3,14 @@ package com.rt.order;
 // Import Avro-generated class representing our event structure
 // Think of this as the “template” for an order ticket.
 
-//import com.example.avro.OrderCreated;
-//import org.apache.kafka.clients.producer.ProducerRecord;
+import com.rt.avro.OrderCreated;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 
 /**
@@ -25,18 +28,18 @@ public class OrderController {
 
     // KafkaTemplate = ready-to-use producer helper
     // It's like a "courier service" that knows how to send events to Kafka.
-//    private final KafkaTemplate<String, Object> template;
-//
-//    // The topic name is loaded from application.yml
-//    // (e.g., app.topic.order = order.v1)
-//    @Value("${app.topic.order}")
-//    private String orderTopic;
-//
-//    // Constructor-based dependency injection
-//    // Spring will automatically inject the KafkaTemplate bean from KafkaProducerConfig
-//    public OrderController(KafkaTemplate<String, Object> template) {
-//        this.template = template;
-//    }
+    private final KafkaTemplate<String, Object> template;
+
+    // The topic name is loaded from application.yml
+    // (e.g., app.topic.order = order.v1)
+    @Value("${app.topic.order}")
+    private String orderTopic;
+
+    // Constructor-based dependency injection
+    // Spring will automatically inject the KafkaTemplate bean from KafkaProducerConfig
+    public OrderController(KafkaTemplate<String, Object> template) {
+        this.template = template;
+    }
 
     /**
      * =========================================
@@ -56,32 +59,27 @@ public class OrderController {
      *  2️⃣ Build an Avro event (OrderCreated).
      *  3️⃣ Send it to Kafka via KafkaTemplate.
      */
-//    @PostMapping
-//    public String create(@RequestBody OrderRequest req) {
-//
-//        // 1️⃣ Build the Avro event from request
-//        // This event matches a schema defined in src/main/avro/OrderCreated.avsc
-//        // It's like filling out a “standardized order form”.
-//        OrderCreated event = OrderCreated.newBuilder()
-//                .setOrderId(req.getOrderId())
-//                .setSymbol(req.getSymbol())
-//                .setQty(req.getQty())
-//                .setPrice(req.getPrice())
-//                .build();
-//
-//        // 2️⃣ Publish to Kafka topic
-//        // We create a ProducerRecord (like an addressed envelope):
-//        //   - topic = which mailbox to drop it in
-//        //   - key   = event.getOrderId() (used for partitioning)
-//        //   - value = the actual Avro event (serialized and sent)
-//        template.send(new ProducerRecord<>(orderTopic, event.getOrderId(), event));
-//
-//        // 3️⃣ Return simple confirmation to API client
-//        return "Order accepted: " + req.getOrderId();
-//    }
+    @PostMapping
+    public String create(@RequestBody OrderRequest req) {
 
-    @GetMapping
-    public void welcome(){
-        System.out.println("hi");
+        // 1️⃣ Build the Avro event from request
+        // This event matches a schema defined in src/main/avro/OrderCreated.avsc
+        // It's like filling out a “standardized order form”.
+        OrderCreated event = OrderCreated.newBuilder()
+                .setOrderId(req.getOrderId())
+                .setSymbol(req.getSymbol())
+                .setQty(req.getQty())
+                .setPrice(req.getPrice())
+                .build();
+
+        // 2️⃣ Publish to Kafka topic
+        // We create a ProducerRecord (like an addressed envelope):
+        //   - topic = which mailbox to drop it in
+        //   - key   = event.getOrderId() (used for partitioning)
+        //   - value = the actual Avro event (serialized and sent)
+        template.send(new ProducerRecord<>(orderTopic, event.getOrderId(), event));
+
+        // 3️⃣ Return simple confirmation to API client
+        return "Order accepted: " + req.getOrderId();
     }
 }

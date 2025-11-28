@@ -1,0 +1,12 @@
+{
+  "namespace": "com.rt.avro",
+  "type": "record",
+  "name": "OrderCreated",
+  "fields": [
+    {"name": "orderId", "type": "string"},
+    {"name": "symbol", "type": "string"},
+    {"name": "qty", "type": "int"},
+    {"name": "price", "type": "double"},
+    {"name": "side", "type": ["null", "string"], "default": null}
+  ]
+}
